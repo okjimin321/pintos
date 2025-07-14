@@ -44,6 +44,8 @@ struct sleep_thread
     int iterations;             /* Iterations counted so far. */
   };
 
+//test for Lottery schedule
+
 static void sleeper (void *);
 
 /* Runs THREAD_CNT threads thread sleep ITERATIONS times each. */

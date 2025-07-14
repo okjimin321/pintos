@@ -11,6 +11,10 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+
+//test for lottery
+#include<stdlib.h>
+
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -69,6 +73,8 @@ static void kernel_thread (thread_func *, void *aux);
 static void idle (void *aux UNUSED);
 static struct thread *running_thread (void);
 static struct thread *next_thread_to_run (void);
+//test for lottery
+static struct thread* next_thread_by_lottery(void); 
 static void init_thread (struct thread *, const char *name, int priority);
 static bool is_thread (struct thread *) UNUSED;
 static void *alloc_frame (struct thread *, size_t size);
@@ -93,6 +99,7 @@ void
 thread_init (void)// thread system을 초기화하고 initial thread를 만듦
 {
   ASSERT (intr_get_level () == INTR_OFF);
+  //test for lottery
 
   lock_init (&tid_lock);
   list_init (&ready_list);
@@ -125,6 +132,9 @@ thread_start (void)// idle thread를 만들고 인터럽트를 켬
   /*인터럽트를 켜버리면 timer interrupt가 발생할 것이고
   이것 떄문에 scheduler가 활성화 되는 side effect가 있음
   */
+
+  //test for lottery
+  random_init(timer_ticks());
 
   /* Wait for the idle thread to initialize idle_thread. */
   sema_down (&idle_started);
@@ -270,7 +280,7 @@ thread_sleep(int64_t ticks){
   {
     cur->tick_to_awake = ticks;
     list_push_back(&blocked_list, &cur->elem);
-  }// idle thread는 상태만 바꾸고 list에 넣지 않음음
+  }// idle thread는 상태만 바꾸고 list에 넣지 않음
   
   update_next_tick_to_awake();
   cur->status = THREAD_BLOCKED;
@@ -556,7 +566,13 @@ init_thread (struct thread *t, const char *name, int priority)
   t->tick_to_awake = INT64_MAX;
   t->magic = THREAD_MAGIC;
 
-  old_level = intr_disable ();
+  //test for lottery(랜덤적 요소를 섞은 테스트 케이스)
+  old_level = intr_disable();
+  
+  t->tickets = t->priority * 100 + 1;
+  printf("tid= %d, tickets= %d \n", t->tid, (int)t->tickets);
+
+  //old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem); // 공유 자원이니까 인터럽트 끄고 작업업
   intr_set_level (old_level);
 }
@@ -580,7 +596,7 @@ alloc_frame (struct thread *t, size_t size)
    will be in the run queue.)  If the run queue is empty, return
    idle_thread. */
 static struct thread *
-next_thread_to_run (void) 
+next_thread_to_run (void)// 단순한 FIFO 구조 사용하고 있음음
 {
   if (list_empty (&ready_list))
     return idle_thread;
@@ -588,6 +604,41 @@ next_thread_to_run (void)
     return list_entry (list_pop_front (&ready_list), struct thread, elem);
 }
 
+//test for lottery
+static struct thread*
+next_thread_by_lottery(void){
+  if (list_empty (&ready_list))
+    return idle_thread;
+
+  else{
+    //total tickets를 구하기
+    int64_t total_tickets = 0;
+    for (struct list_elem* e = list_begin(&ready_list);
+       e != list_end(&ready_list);
+       e = list_next(e)) {
+    struct thread* t = list_entry(e, struct thread, elem);
+    total_tickets += t->tickets;
+    }
+
+    int64_t counter = 0;
+    
+    int64_t winner = random_ulong() % total_tickets;
+
+    struct list_elem* e;
+    e = list_begin(&ready_list);
+
+    while(e != list_end (&ready_list)){
+      struct thread* t = list_entry(e, struct thread, elem);
+
+      counter += t->tickets;
+      if(counter >= winner){
+        list_remove(e);
+        return t;
+      }
+      e = list_next(e);
+    }
+  }
+}
 /* Completes a thread switch by activating the new thread's page
    tables, and, if the previous thread is dying, destroying it.
 
@@ -645,7 +696,9 @@ static void
 schedule (void)// block, exit, yield에서 호출(interrupt를 끈 상태에서 호출함)
 {
   struct thread *cur = running_thread ();
-  struct thread *next = next_thread_to_run ();// ready list 맨 앞에서 빼옴
+  //test for lottery 
+  struct thread * next = next_thread_by_lottery();
+  //struct thread *next = next_thread_to_run ();// ready list 맨 앞에서 빼옴
   struct thread *prev = NULL;
 
   ASSERT (intr_get_level () == INTR_OFF);

@@ -93,6 +93,7 @@ struct thread
     int64_t tick_to_awake;
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    int64_t tickets;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

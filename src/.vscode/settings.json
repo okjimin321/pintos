@@ -4,6 +4,9 @@
         "deque": "c",
         "string": "c",
         "vector": "c",
-        "string_view": "c"
+        "string_view": "c",
+        "stddef.h": "c",
+        "random.h": "c",
+        "process.h": "c"
     }
 }
