@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#define STRIDE_LARGE_NUM 1000000
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -93,7 +94,10 @@ struct thread
     int64_t tick_to_awake;
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-    int64_t tickets;
+
+    int64_t tickets; // proportional scheduling
+    int64_t stride;
+    int64_t pass;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

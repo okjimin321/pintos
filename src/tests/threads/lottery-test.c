@@ -7,10 +7,12 @@
 static volatile unsigned long long counter[3];
 static volatile bool thread_exit_flag = false;
 
-static void counter_thread(void *aux){
+static void count_thread(void *aux){
     int id = *(int *)aux;
     for(;;){
         counter[id]++;
+        thread_yield();
+
         if(thread_exit_flag)
           thread_exit();
     }
@@ -22,9 +24,9 @@ void test_lottery(void){
 
     msg("Starting lottery scheduler test...");
 
-    thread_create("high",   30, counter_thread, &ids[0]);
-    thread_create("medium", 20, counter_thread, &ids[1]);
-    thread_create("low",    10, counter_thread, &ids[2]);
+    thread_create("high",   3, count_thread, &ids[0]);
+    thread_create("medium", 2, count_thread, &ids[1]);
+    thread_create("low",    1, count_thread, &ids[2]);
 
     int sleep_duration = 500;
     msg("sleep_duration = %d",sleep_duration);

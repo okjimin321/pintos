@@ -493,6 +493,7 @@ idle (void *idle_started_ UNUSED)
   idle_thread = thread_current ();
   sema_up (idle_started);
 
+
   for (;;) 
     {
       /* Let someone else run. */
@@ -566,14 +567,13 @@ init_thread (struct thread *t, const char *name, int priority)
   t->tick_to_awake = INT64_MAX;
   t->magic = THREAD_MAGIC;
 
-  //test for lottery(랜덤적 요소를 섞은 테스트 케이스)
-  old_level = intr_disable();
-  
-  t->tickets = t->priority * 100 + 1;
-  printf("tid= %d, tickets= %d \n", t->tid, (int)t->tickets);
+  //test for proportional scheduling
+  t->tickets = t->priority * 1000 + 1;
+  t->stride = STRIDE_LARGE_NUM / t->tickets;
+  t->pass = 0;
 
-  //old_level = intr_disable ();
-  list_push_back (&all_list, &t->allelem); // 공유 자원이니까 인터럽트 끄고 작업업
+  old_level = intr_disable ();
+  list_push_back (&all_list, &t->allelem); // 공유 자원이니까 인터럽트 끄고 작업
   intr_set_level (old_level);
 }
 
@@ -596,12 +596,35 @@ alloc_frame (struct thread *t, size_t size)
    will be in the run queue.)  If the run queue is empty, return
    idle_thread. */
 static struct thread *
-next_thread_to_run (void)// 단순한 FIFO 구조 사용하고 있음음
+next_thread_to_run (void)// 단순한 FIFO 구조 사용하고 있음
 {
   if (list_empty (&ready_list))
     return idle_thread;
   else
     return list_entry (list_pop_front (&ready_list), struct thread, elem);
+}
+
+bool
+thread_pass_less(const struct list_elem* a, const struct list_elem*b, void * aux){
+  struct thread* t1 = list_entry(a, struct thread, elem);
+  struct thread* t2 = list_entry(b, struct thread, elem);
+
+  return t1->pass < t2->pass;
+}
+
+static struct thread *
+next_thread_by_stride (void)
+{
+  if (list_empty (&ready_list))
+    return idle_thread;
+  else{
+    struct list_elem* e = list_min(&ready_list, thread_pass_less, NULL);// remove min pass
+    struct thread* next = list_entry(e, struct thread, elem);
+    next->pass += next->stride;// update pass
+    list_remove(e);
+
+    return next;
+  }
 }
 
 //test for lottery
@@ -621,7 +644,6 @@ next_thread_by_lottery(void){
     }
 
     int64_t counter = 0;
-    
     int64_t winner = random_ulong() % total_tickets;
 
     struct list_elem* e;
