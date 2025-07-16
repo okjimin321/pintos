@@ -5,7 +5,8 @@
 #include <list.h>
 #include <stdint.h>
 #define STRIDE_LARGE_NUM 1000000
-#define WEIGHT_0 60000
+#define WEIGHT_0 1024
+#define F 1 << 14
 
 // weight for cfs scheduling
 static const int64_t priority_to_weight[] = {

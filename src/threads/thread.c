@@ -75,9 +75,13 @@ static void kernel_thread (thread_func *, void *aux);
 static void idle (void *aux UNUSED);
 static struct thread *running_thread (void);
 static struct thread *next_thread_to_run (void);
+
 //test for lottery
 static struct thread* next_thread_by_lottery(void); 
 static struct thread * next_thread_by_cfs (void);
+static struct thread * next_thread_by_stride (void);
+static void update_min_VT(void);
+
 static void init_thread (struct thread *, const char *name, int priority);
 static bool is_thread (struct thread *) UNUSED;
 static void *alloc_frame (struct thread *, size_t size);
@@ -164,9 +168,10 @@ thread_tick (void)
     kernel_ticks++;
 
   //for cfs scheduling
-  if(t->name != idle_thread)
-    t->vrunTime += ((WEIGHT_0 * 1000) / thread_get_weight());
-  
+  if(t->name != idle_thread){
+    t->vrunTime += ((WEIGHT_0 ) / thread_get_weight()) * F;// using 17.14 fixed point
+    //update_min_VT();
+  }
   /* Enforce preemption. */
   if (t->vrunTime > min_VT)// 더 적은 vruntime을 가진 thread가 있으면 yield
     intr_yield_on_return ();
@@ -629,6 +634,13 @@ thread_vrunTime_less(const struct list_elem* a, const struct list_elem*b, void *
   return t1->vrunTime < t2->vrunTime;
 }
 
+static void
+update_min_VT(void){
+  struct list_elem* min = list_min(&ready_list, thread_vrunTime_less, NULL);
+    if(min != NULL)
+      min_VT = list_entry(min, struct thread, elem)->vrunTime;
+}
+
 static struct thread *
 next_thread_by_cfs (void)
 {
@@ -640,9 +652,7 @@ next_thread_by_cfs (void)
     list_remove(e);
     
     //test for cfs(update min vrunTime)
-    struct list_elem* min = list_min(&ready_list, thread_vrunTime_less, NULL);
-    if(min != NULL)
-      min_VT = list_entry(min, struct thread, elem)->vrunTime;
+    update_min_VT();
     
     return next;
   }
