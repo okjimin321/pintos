@@ -5,6 +5,13 @@
 #include <list.h>
 #include <stdint.h>
 #define STRIDE_LARGE_NUM 1000000
+#define WEIGHT_0 60000
+
+// weight for cfs scheduling
+static const int64_t priority_to_weight[] = {
+    10,  6,  2,  1,  200,  100,    110,    87,
+    70,     56,     45,     36,     29,     23,     18,     15,
+};
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -99,6 +106,8 @@ struct thread
     int64_t stride;
     int64_t pass;
 
+    int64_t vrunTime; // cfs scheduling
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -118,6 +127,8 @@ void thread_sleep(int64_t ticks);
 void thread_awake(int64_t ticks);
 void update_next_tick_to_awake(void);
 int64_t get_next_tick_to_awake(void);
+//cfs scheduling
+int64_t thread_get_weight(void);
 
 void thread_init (void);
 void thread_start (void);

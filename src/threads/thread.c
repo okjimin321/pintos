@@ -19,6 +19,8 @@
 #include "userprog/process.h"
 #endif
 
+//test for cfs
+int min_VT = 0;
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -60,7 +62,7 @@ static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
 
 /* Scheduling. */
-#define TIME_SLICE 4            /* # of timer ticks to give each thread. */
+#define TIME_SLICE 4           /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 
 /* If false (default), use round-robin scheduler.
@@ -75,6 +77,7 @@ static struct thread *running_thread (void);
 static struct thread *next_thread_to_run (void);
 //test for lottery
 static struct thread* next_thread_by_lottery(void); 
+static struct thread * next_thread_by_cfs (void);
 static void init_thread (struct thread *, const char *name, int priority);
 static bool is_thread (struct thread *) UNUSED;
 static void *alloc_frame (struct thread *, size_t size);
@@ -140,6 +143,9 @@ thread_start (void)// idle thread를 만들고 인터럽트를 켬
   sema_down (&idle_started);
 }
 
+//test for cfs
+
+
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context. */
 void
@@ -157,8 +163,12 @@ thread_tick (void)
   else
     kernel_ticks++;
 
+  //for cfs scheduling
+  if(t->name != idle_thread)
+    t->vrunTime += ((WEIGHT_0 * 1000) / thread_get_weight());
+  
   /* Enforce preemption. */
-  if (++thread_ticks >= TIME_SLICE)// time slice를 다 쓰면 양보
+  if (t->vrunTime > min_VT)// 더 적은 vruntime을 가진 thread가 있으면 yield
     intr_yield_on_return ();
 }
 
@@ -336,9 +346,14 @@ int64_t get_next_tick_to_awake(void){
   if(list_empty (&blocked_list)){
     next_tick_to_awake = INT64_MAX;
   }
-
   return next_tick_to_awake;
 }
+
+int64_t thread_get_weight(void){
+   //need to add "ASSERT"
+   return priority_to_weight[thread_current()->priority];
+}
+
 /* Returns the name of the running thread. */
 const char *
 thread_name (void) 
@@ -410,6 +425,7 @@ thread_yield (void)// 스케줄러에게 cpu를 넘김
   old_level = intr_disable (); // 인터럽트 종료 후, 이전 상태 리턴
   if (cur != idle_thread) 
     list_push_back (&ready_list, &cur->elem);
+
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level); // 이전 상태 복원
@@ -571,6 +587,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->tickets = t->priority * 1000 + 1;
   t->stride = STRIDE_LARGE_NUM / t->tickets;
   t->pass = 0;
+  t->vrunTime = 0;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem); // 공유 자원이니까 인터럽트 끄고 작업
@@ -604,7 +621,34 @@ next_thread_to_run (void)// 단순한 FIFO 구조 사용하고 있음
     return list_entry (list_pop_front (&ready_list), struct thread, elem);
 }
 
-bool
+static bool
+thread_vrunTime_less(const struct list_elem* a, const struct list_elem*b, void * aux){
+  struct thread* t1 = list_entry(a, struct thread, elem);
+  struct thread* t2 = list_entry(b, struct thread, elem);
+
+  return t1->vrunTime < t2->vrunTime;
+}
+
+static struct thread *
+next_thread_by_cfs (void)
+{
+  if (list_empty (&ready_list))
+    return idle_thread;
+  else{
+    struct list_elem* e = list_min(&ready_list, thread_vrunTime_less, NULL);// remove min pass
+    struct thread* next = list_entry(e, struct thread, elem);
+    list_remove(e);
+    
+    //test for cfs(update min vrunTime)
+    struct list_elem* min = list_min(&ready_list, thread_vrunTime_less, NULL);
+    if(min != NULL)
+      min_VT = list_entry(min, struct thread, elem)->vrunTime;
+    
+    return next;
+  }
+}
+
+static bool
 thread_pass_less(const struct list_elem* a, const struct list_elem*b, void * aux){
   struct thread* t1 = list_entry(a, struct thread, elem);
   struct thread* t2 = list_entry(b, struct thread, elem);
@@ -719,7 +763,7 @@ schedule (void)// block, exit, yield에서 호출(interrupt를 끈 상태에서 
 {
   struct thread *cur = running_thread ();
   //test for lottery 
-  struct thread * next = next_thread_by_lottery();
+  struct thread * next = next_thread_by_cfs();
   //struct thread *next = next_thread_to_run ();// ready list 맨 앞에서 빼옴
   struct thread *prev = NULL;
 
