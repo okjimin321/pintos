@@ -692,7 +692,7 @@ static void
 schedule (void)// block, exit, yield에서 호출(interrupt를 끈 상태에서 호출함)
 {
   struct thread *cur = running_thread ();
-  //test for lottery 
+  //pick next thread by propability
   struct thread * next = next_thread_by_lottery();
   //struct thread *next = next_thread_to_run ();// ready list 맨 앞에서 빼옴
   struct thread *prev = NULL;
