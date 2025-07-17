@@ -569,7 +569,7 @@ init_thread (struct thread *t, const char *name, int priority)
   printf("tid= %d, tickets= %d \n", t->tid, (int)t->tickets);
    
   old_level = intr_disable();
-  list_push_back (&all_list, &t->allelem); // 공유 자원이니까 인터럽트 끄고 작업업
+  list_push_back (&all_list, &t->allelem); // 공유 자원이니까 인터럽트 끄고 작업
   intr_set_level (old_level);
 }
 
