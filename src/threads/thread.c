@@ -647,7 +647,7 @@ next_thread_by_cfs (void)
   if (list_empty (&ready_list))
     return idle_thread;
   else{
-    struct list_elem* e = list_min(&ready_list, thread_vrunTime_less, NULL);// remove min pass
+    struct list_elem* e = list_min(&ready_list, thread_vrunTime_less, NULL);// remove thread that has min virtual time 
     struct thread* next = list_entry(e, struct thread, elem);
     list_remove(e);
     
