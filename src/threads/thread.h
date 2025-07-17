@@ -10,8 +10,7 @@
 
 // weight for cfs scheduling
 static const int64_t priority_to_weight[] = {
-    10,  6,  2,  1,  200,  100,    110,    87,
-    70,     56,     45,     36,     29,     23,     18,     15,
+    10,  6,  2,  1,  200,  100,    110,    87
 };
 
 /* States in a thread's life cycle. */
