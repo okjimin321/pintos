@@ -29,8 +29,6 @@ int process_add_file(struct file* file){
   for(int i = 2; i < FD_SIZE; i++){
     if(t->fd_table[i] == NULL){
       t->fd_table[i] = file;
-      //printf("process add file: %p \n\n", file);
-      //printf("process add fd_tablee: %p \n\n", t->fd_table[i]);
       return i;
     }
   }
