@@ -2,6 +2,7 @@
 #include <debug.h>
 #include "filesys/inode.h"
 #include "threads/malloc.h"
+#include "threads/synch.h"
 
 /* An open file. */
 struct file 
@@ -9,6 +10,7 @@ struct file
     struct inode *inode;        /* File's inode. */
     off_t pos;                  /* Current position. */
     bool deny_write;            /* Has file_deny_write() been called? */
+    bool open_flag;
   };
 
 /* Opens a file for the given INODE, of which it takes ownership,
@@ -22,7 +24,11 @@ file_open (struct inode *inode)
     {
       file->inode = inode;
       file->pos = 0;
-      file->deny_write = false;
+      file->deny_write = false; 
+
+      //sema_init(&file->read_lock, 1);// read write 초기화
+      //sema_init(&file->write_lock, 1);// 초기화
+
       return file;
     }
   else

@@ -118,7 +118,7 @@ void
 intr_init (void)
 {
   //debug
-  printf("\ninterrupt_initialization\n\n");
+  //printf("\ninterrupt_initialization\n\n");
 
   uint64_t idtr_operand;
   int i;

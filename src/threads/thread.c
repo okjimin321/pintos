@@ -19,6 +19,8 @@
 #include "userprog/process.h"
 #endif
 
+//test for cfs
+int min_VT = 0;
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -60,7 +62,7 @@ static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
 
 /* Scheduling. */
-#define TIME_SLICE 4            /* # of timer ticks to give each thread. */
+#define TIME_SLICE 4           /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 
 /* If false (default), use round-robin scheduler.
@@ -73,8 +75,13 @@ static void kernel_thread (thread_func *, void *aux);
 static void idle (void *aux UNUSED);
 static struct thread *running_thread (void);
 static struct thread *next_thread_to_run (void);
+
 //test for lottery
 static struct thread* next_thread_by_lottery(void); 
+static struct thread * next_thread_by_cfs (void);
+static struct thread * next_thread_by_stride (void);
+static void update_min_VT(void);
+
 static void init_thread (struct thread *, const char *name, int priority);
 static bool is_thread (struct thread *) UNUSED;
 static void *alloc_frame (struct thread *, size_t size);
@@ -114,7 +121,7 @@ thread_init (void)// thread system을 초기화하고 initial thread를 만듦
   initial_thread->tid = allocate_tid ();
 
   //debug
-  printf("\nmain thread %d is initialized\n", initial_thread->tid);
+  //printf("\nmain thread %d is initialized\n", initial_thread->tid);
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -140,6 +147,22 @@ thread_start (void)// idle thread를 만들고 인터럽트를 켬
   sema_down (&idle_started);
 }
 
+struct thread* get_thread_by_tid(tid_t tid){
+  struct thread* tar;
+  struct list_elem* e = list_begin(&all_list);
+
+  while(e != list_end(&all_list)){// child thread가 있는지 탐색
+    struct thread* t = list_entry(e, struct thread, elem);
+    if(t->tid == tid){
+      tar = t;
+      break;
+    }
+    e = list_next(e);
+  }
+  return tar;
+}
+
+
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context. */
 void
@@ -157,9 +180,19 @@ thread_tick (void)
   else
     kernel_ticks++;
 
-  /* Enforce preemption. */
-  if (++thread_ticks >= TIME_SLICE)// time slice를 다 쓰면 양보
-    intr_yield_on_return ();
+  // //for cfs scheduling
+  // if(t->name != idle_thread){
+    
+  //   t->vrunTime += ((WEIGHT_0 ) / thread_get_weight()) * F;// using 17.14 fixed point
+  //   //update_min_VT();
+  // }
+  // /* Enforce preemption. */
+  // thread_ticks++;
+  // if (t->vrunTime > min_VT)// 더 적은 vruntime을 가진 thread가 있으면 yield
+  //   intr_yield_on_return ();
+
+  if(++thread_ticks >= TIME_SLICE)
+    intr_yield_on_return();
 }
 
 /* Prints thread statistics. */
@@ -205,9 +238,6 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
-  
-  //debug 
-  printf("thread %d creation \n", tid);
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -336,9 +366,14 @@ int64_t get_next_tick_to_awake(void){
   if(list_empty (&blocked_list)){
     next_tick_to_awake = INT64_MAX;
   }
-
   return next_tick_to_awake;
 }
+
+int64_t thread_get_weight(void){
+   //need to add "ASSERT"
+   return priority_to_weight[thread_current()->priority];
+}
+
 /* Returns the name of the running thread. */
 const char *
 thread_name (void) 
@@ -380,18 +415,16 @@ thread_exit (void)
   ASSERT (!intr_context ());
 
 #ifdef USERPROG
-  process_exit ();
+  process_exit (); 
 #endif
 
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
 
-  //debug
-  printf("%d thread exits\n", thread_current()->tid);
-  
   intr_disable ();
-  list_remove (&thread_current()->allelem);
+  struct thread* cur = thread_current();
+  list_remove (&cur->allelem);
   thread_current ()->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
@@ -410,6 +443,7 @@ thread_yield (void)// 스케줄러에게 cpu를 넘김
   old_level = intr_disable (); // 인터럽트 종료 후, 이전 상태 리턴
   if (cur != idle_thread) 
     list_push_back (&ready_list, &cur->elem);
+
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level); // 이전 상태 복원
@@ -545,7 +579,7 @@ static bool
 is_thread (struct thread *t)
 {
   return t != NULL && t->magic == THREAD_MAGIC;
-}//magic number 확인하여
+}// magic number 확인하여
 
 /* Does basic initialization of T as a blocked thread named
    NAME. */
@@ -566,14 +600,33 @@ init_thread (struct thread *t, const char *name, int priority)
   t->tick_to_awake = INT64_MAX;
   t->magic = THREAD_MAGIC;
 
-  //test for lottery(랜덤적 요소를 섞은 테스트 케이스)
-  old_level = intr_disable();
-  
-  t->tickets = t->priority * 100 + 1;
-  printf("tid= %d, tickets= %d \n", t->tid, (int)t->tickets);
+  //test for proportional scheduling
+  t->tickets = t->priority * 1000 + 1;
+  t->stride = STRIDE_LARGE_NUM / t->tickets;
+  t->pass = 0;
+  t->vrunTime = 0;
 
-  //old_level = intr_disable ();
-  list_push_back (&all_list, &t->allelem); // 공유 자원이니까 인터럽트 끄고 작업업
+#ifdef USERPROG
+  for(int i = 0; i < FD_SIZE; i++){
+    t->fd_table[i] = NULL;
+  }
+  t->wait_flag = false;
+  t->exit_flag = false;
+  t->load_flag = false;
+  t->exit_status = -1;
+
+  list_init(&(t->child_threads));
+  list_push_back(&running_thread()->child_threads, &t->child_thread_elem);
+
+  t->parent_thread=running_thread();
+  sema_init(&(t->load_sema), 0);
+  sema_init(&(t->mem_lock), 0 );
+  sema_init(&(t->exit_sema), 0);
+  
+#endif
+
+  old_level = intr_disable ();
+  list_push_back (&all_list, &t->allelem); // 공유 자원이니까 인터럽트 끄고 작업
   intr_set_level (old_level);
 }
 
@@ -596,12 +649,67 @@ alloc_frame (struct thread *t, size_t size)
    will be in the run queue.)  If the run queue is empty, return
    idle_thread. */
 static struct thread *
-next_thread_to_run (void)// 단순한 FIFO 구조 사용하고 있음음
+next_thread_to_run (void)// 단순한 FIFO 구조 사용하고 있음
 {
   if (list_empty (&ready_list))
     return idle_thread;
   else
     return list_entry (list_pop_front (&ready_list), struct thread, elem);
+}
+
+static bool
+thread_vrunTime_less(const struct list_elem* a, const struct list_elem*b, void * aux){
+  struct thread* t1 = list_entry(a, struct thread, elem);
+  struct thread* t2 = list_entry(b, struct thread, elem);
+
+  return t1->vrunTime < t2->vrunTime;
+}
+
+static void
+update_min_VT(void){
+  struct list_elem* min = list_min(&ready_list, thread_vrunTime_less, NULL);
+    if(min != NULL)
+      min_VT = list_entry(min, struct thread, elem)->vrunTime;
+}
+
+static struct thread *
+next_thread_by_cfs (void)
+{
+  if (list_empty (&ready_list))
+    return idle_thread;
+  else{
+    struct list_elem* e = list_min(&ready_list, thread_vrunTime_less, NULL);// remove min pass
+    struct thread* next = list_entry(e, struct thread, elem);
+    list_remove(e);
+    
+    //test for cfs(update min vrunTime)
+    update_min_VT();
+    
+    return next;
+  }
+}
+
+static bool
+thread_pass_less(const struct list_elem* a, const struct list_elem*b, void * aux){
+  struct thread* t1 = list_entry(a, struct thread, elem);
+  struct thread* t2 = list_entry(b, struct thread, elem);
+
+  return t1->pass < t2->pass;
+}
+
+static struct thread *
+next_thread_by_stride (void)
+{
+  if (list_empty (&ready_list))
+    return idle_thread;
+  else{
+    struct list_elem* e = list_min(&ready_list, thread_pass_less, NULL);// remove min pass
+    struct thread* next = list_entry(e, struct thread, elem);
+    next->pass += next->stride;// update pass
+    list_remove(e);
+
+    return next;
+  }
 }
 
 //test for lottery
@@ -621,7 +729,6 @@ next_thread_by_lottery(void){
     }
 
     int64_t counter = 0;
-    
     int64_t winner = random_ulong() % total_tickets;
 
     struct list_elem* e;

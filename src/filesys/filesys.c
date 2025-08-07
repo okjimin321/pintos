@@ -6,9 +6,11 @@
 #include "filesys/free-map.h"
 #include "filesys/inode.h"
 #include "filesys/directory.h"
+#include "threads/synch.h"
 
 /* Partition that contains the file system. */
 struct block *fs_device;
+struct semaphore open_lock;// 한번에 한 파일만 열리게 Lock
 
 static void do_format (void);
 
@@ -23,6 +25,8 @@ filesys_init (bool format)
 
   inode_init ();
   free_map_init ();
+  //test
+  sema_init(&open_lock, 1);
 
   if (format) 
     do_format ();
@@ -66,6 +70,7 @@ filesys_create (const char *name, off_t initial_size)
 struct file *
 filesys_open (const char *name)
 {
+  sema_down(&open_lock);// 한번에 한 파일만 열 수 있게 lock
   struct dir *dir = dir_open_root ();
   struct inode *inode = NULL;
 
@@ -73,7 +78,9 @@ filesys_open (const char *name)
     dir_lookup (dir, name, &inode);
   dir_close (dir);
 
-  return file_open (inode);
+  struct file* file = file_open(inode);
+  sema_up(&open_lock);// file을 열면 release
+  return file;
 }
 
 /* Deletes the file named NAME.

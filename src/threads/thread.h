@@ -4,6 +4,17 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "synch.h"
+#define FD_SIZE 130
+#define STRIDE_LARGE_NUM 1000000
+#define WEIGHT_0 1024
+#define F 1 << 14
+
+// weight for cfs scheduling
+static const int64_t priority_to_weight[] = {
+    10,  100,  200,  300,  200,  100,    110,    87,
+    70,     56,     45,     36,     29,     23,     18,     15,
+};
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -93,11 +104,31 @@ struct thread
     int64_t tick_to_awake;
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-    int64_t tickets;
 
+    int64_t tickets; // proportional scheduling
+    int64_t stride;
+    int64_t pass;
+
+    int64_t vrunTime; // cfs scheduling
+   
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    struct file* fd_table[FD_SIZE];
+
+    struct thread* parent_thread;
+    struct list_elem child_thread_elem;
+    struct list child_threads;
+    
+    struct semaphore exit_sema;
+    struct semaphore mem_lock;
+    struct semaphore load_sema;
+
+    bool wait_flag;
+    bool exit_flag;
+    bool load_flag;
+    
+    int exit_status;
 #endif
 
     /* Owned by thread.c. */
@@ -114,6 +145,9 @@ void thread_sleep(int64_t ticks);
 void thread_awake(int64_t ticks);
 void update_next_tick_to_awake(void);
 int64_t get_next_tick_to_awake(void);
+
+//cfs scheduling
+int64_t thread_get_weight(void);
 
 void thread_init (void);
 void thread_start (void);
@@ -146,4 +180,5 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+struct thread* get_thread_by_tid(tid_t);
 #endif /* threads/thread.h */
