@@ -133,11 +133,6 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  // for(int i = 0; i < 2000000000;){
-  //   i++;
-  // }
-  // return 0;
-
   if(child_tid == -1)
     return -1;
   
