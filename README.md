@@ -1,6 +1,4 @@
-# INHA University Pintos Projects
-
-This repository contains the implementation of key Pintos projects as part of the INHA University Operating Systems course.
+# Pintos Projects
 
 ## Project 1: Alarm Clock & Scheduling
 - **Alarm Clock**  
